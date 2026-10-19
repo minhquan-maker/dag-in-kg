@@ -119,13 +119,41 @@ Phân phối Beta là một đường cong trên [0, 1] có hình dạng do hai 
 - **Easy và hard answers:** đồ thị chia train ⊂ valid ⊂ test. Với truy vấn test, đáp án tìm được bằng cách duyệt đồ thị valid là "easy"; đáp án chỉ xuất hiện khi thêm cạnh test là "hard", tức mô hình phải tự suy ra cạnh thiếu. Chỉ hard answers được tính điểm, easy bị loại khỏi bảng xếp hạng (filtered setting).
 - **Độ đo:** với mỗi hard answer lấy thứ hạng của nó trong danh sách mọi thực thể. MRR là trung bình 1/thứ hạng, Hits@k là tỉ lệ đáp án nằm trong top-k. Báo cáo riêng từng dạng truy vấn.
 
-Phần chạy thực nghiệm GQE / Query2Box trên FB15k-237 là repo của Trần Bình (fork từ snap-stanford/KGReasoning, chạy bản nhỏ trên CPU), nên mình không làm lại. Ở phần dưới mình chạy hướng còn lại, là phân cấp is-a ở mục 2.1.
+Phần 5 là mình tự chạy lại ba mô hình này trên FB15k-237; phần 6 chạy thêm hướng phân cấp is-a ở mục 2.1.
 
-# 5. Tự chạy: nhúng DAG is-a của WordNet
+# 5. Tự chạy: GQE, Query2Box, BetaE trên FB15k-237
+
+Mình không fork repo của Trần Bình mà viết lại từ đầu (thư mục `kgqa/` trong repo), giữ cùng ý tưởng: sinh bộ câu hỏi kiểu BetaE từ FB15k-237 rồi train và đo MRR trên hard answers.
+
+## 5.1. Mình làm khác chỗ nào
+
+- Mỗi dạng câu hỏi là một DAG nhỏ khai báo trong `dagq.py` (anchor, chiếu, giao, phủ định), một bộ thực thi duyệt DAG theo thứ tự topo rồi gọi phép của mô hình. Ba mô hình dùng chung bộ này.
+- Sinh câu hỏi bằng cách chọn một thực thể đáp án rồi đi ngược qua DAG; với valid/test ép một cạnh bị giấu (held-out) vào đường đi để có hard answers.
+- 40.000 câu train mỗi dạng, 1.000 câu test mỗi dạng; số cạnh train/valid/test khớp BetaE (272.115 / 17.526 / 20.438).
+- Thêm 5 dạng có phủ định (2in, 3in, inp, pin, pni) cho BetaE.
+
+## 5.2. Kết quả
+
+CPU 4 nhân, 1 seed: GQE 12.000 bước, Query2Box 8.000, BetaE 6.000, batch 128, dim 256. MRR (%) trên hard answers của tập test, trung bình 9 dạng (avg):
+
+| Mô hình | 1p | 2p | 3p | 2i | 3i | ip | pi | 2u | up | avg |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GQE | 11,5 | 10,2 | 9,1 | 15,1 | 14,9 | 14,9 | 14,5 | 5,3 | 4,8 | **11,1** |
+| Query2Box | 13,8 | 10,2 | 9,0 | 17,4 | 18,9 | 15,5 | 16,9 | 6,1 | 5,6 | **12,6** |
+| BetaE | 2,3 | 1,5 | 1,1 | 2,8 | 2,0 | 1,4 | 1,4 | 1,9 | 1,0 | **1,7** |
+
+BetaE train thêm cả dạng phủ định đạt 1,9% trung bình trên 5 dạng 2in, 3in, inp, pin, pni.
+
+- Query2Box hơn GQE ở các dạng có giao (2i, 3i, pi), đúng ý của hộp: giao hộp luôn nhỏ lại.
+- Cả hai yếu nhất ở dạng có hợp (2u, up).
+- BetaE mới train 6.000 bước nên thấp. Có thể do γ = 24 chưa hợp với thang KL, mình chưa thử giá trị khác, nên không kết luận được BetaE kém hơn.
+- Một seed, chưa tune siêu tham số.
+
+# 6. Chạy thêm: nhúng DAG is-a của WordNet
 
 Repo: github.com/minhquan-maker/dag-in-kg. Mục tiêu: kiểm tra xem mấy cách nhúng ở 2.1 có thật sự đọc ra được "u là một loại của v" từ hình học hay không, trên một DAG thật chứ không phải ví dụ đồ chơi.
 
-## 5.1. Dữ liệu
+## 6.1. Dữ liệu
 
 WordNet 3.0 danh từ, dùng đúng bộ của Poincaré Embeddings (Nickel & Kiela, NeurIPS 2017) và Hyperbolic Entailment Cones (Ganea và cộng sự, ICML 2018). Mình tự dựng lại từ file `data.noun` gốc rồi so với số trong paper:
 
@@ -138,7 +166,7 @@ WordNet 3.0 danh từ, dùng đúng bộ của Poincaré Embeddings (Nickel & Ki
 
 Hai số khớp paper thì yên tâm là dựng đúng. 2.213 nút có nhiều cha, nghĩa là dữ liệu này đúng là DAG chứ không phải cây.
 
-## 5.2. Cách làm
+## 6.2. Cách làm
 
 Các thuật toán ở mục 1 được cài trong `dagkg.py` và chạy trên dữ liệu thật: Kahn có kiểm tra chu trình, bao đóng bằng quy hoạch động theo thứ tự topo, rút gọn bắc cầu.
 
@@ -157,7 +185,7 @@ Bốn mô hình, đều dim = 10:
 
 Chạy: `bash run_all.sh`, khoảng 15 phút trên CPU 4 nhân, không cần GPU.
 
-## 5.3. Kết quả
+## 6.3. Kết quả
 
 Tập test, 1 seed, 30 epoch, dim 10.
 
@@ -180,8 +208,8 @@ Mấy điều rút ra:
 - Poincaré **thấp hơn** số trong paper và thấp hơn Box ở đây. Mình chỉ train 30 epoch, dim 10, 1 seed, chọn lr = 30 bằng cách thử trên val và dùng negative trộn kiểu hard cho cả ba mô hình; paper train hàng trăm epoch với setup khác. Nên bảng này **không** dùng để kết luận hyperbolic kém hơn box, nó chỉ cho thấy pipeline chạy đúng và mô hình học được cấu trúc DAG thật.
 - Chỉ một seed nên chênh vài điểm % chưa đủ để kết luận.
 
-# 6. Rút ra
+# 7. Rút ra
 
-DAG xuất hiện trong KG ở hai chỗ chính: phân cấp khái niệm (is-a) và sơ đồ tính toán của câu hỏi nhiều bước (kèm kế hoạch suy luận trong KG-RAG). Với truy vấn logic, GQE, Query2Box, BetaE biến từng phép trên DAG thành phép tính học được nên trả lời được cả những câu cần cạnh bị thiếu; cách biểu diễn câu hỏi đi từ điểm, sang hộp, sang phân phối Beta, và mỗi bước làm được thêm một thứ (đáp án là cả tập, rồi phủ định, rồi độ rộng hẹp của câu hỏi). Với phân cấp, thử trên WordNet thì hộp là cách nhúng ăn nhất trong ba cách đã chạy.
+DAG xuất hiện trong KG ở hai chỗ chính: phân cấp khái niệm (is-a) và sơ đồ tính toán của câu hỏi nhiều bước (kèm kế hoạch suy luận trong KG-RAG). Với truy vấn logic, GQE, Query2Box, BetaE biến từng phép trên DAG thành phép tính học được nên trả lời được cả những câu cần cạnh bị thiếu; cách biểu diễn câu hỏi đi từ điểm, sang hộp, sang phân phối Beta, và mỗi bước làm được thêm một thứ (đáp án là cả tập, rồi phủ định, rồi độ rộng hẹp của câu hỏi). Chạy lại trên FB15k-237 thì Query2Box nhỉnh hơn GQE (MRR trung bình 12,6 so với 11,1), còn BetaE cần train lâu hơn mới đánh giá được. Với phân cấp, thử trên WordNet thì hộp là cách nhúng ăn nhất trong ba cách đã chạy.
 
 Còn muốn làm tiếp: chạy nhiều seed và nhiều epoch để biết chắc Poincaré với Box ai hơn; thử dim lớn hơn 10; thử dùng embedding phân cấp làm thông tin thêm cho truy vấn logic.
