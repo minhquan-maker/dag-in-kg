@@ -1,0 +1,26 @@
+{
+ "args": {
+  "model": "popularity",
+  "edges": "data/wordnet_nouns_edges.tsv",
+  "dim": 10,
+  "frac": 0.0,
+  "epochs": 0,
+  "bsz": 512,
+  "neg": 20,
+  "hard_neg": false,
+  "lr": null,
+  "seed": 0,
+  "out": "results"
+ },
+ "test": {
+  "easy": {
+   "f1": 0.7973781034536066,
+   "mrr": 0.5235022306442261
+  },
+  "hard": {
+   "f1": 0.6796359055715724,
+   "mrr": 0.03850394859910011
+  }
+ },
+ "hist": []
+}
