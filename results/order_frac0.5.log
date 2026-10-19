@@ -1,0 +1,9 @@
+nodes=82115 edges=84427 closure=743241 train=364388 val=32943 test=65887
+ep   5 loss 0.3883 val[hard] F1 0.764 MRR 0.725 (34s)
+ep  10 loss 0.3166 val[hard] F1 0.787 MRR 0.767 (86s)
+ep  15 loss 0.2937 val[hard] F1 0.798 MRR 0.789 (144s)
+ep  20 loss 0.2770 val[hard] F1 0.808 MRR 0.829 (208s)
+ep  25 loss 0.2635 val[hard] F1 0.816 MRR 0.826 (272s)
+ep  30 loss 0.2570 val[hard] F1 0.820 MRR 0.851 (336s)
+TEST easy {'f1': 0.887167857021968, 'mrr': 0.9925045967102051}
+TEST hard {'f1': 0.8192899178846382, 'mrr': 0.8523262143135071}
