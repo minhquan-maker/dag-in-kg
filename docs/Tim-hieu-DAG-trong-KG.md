@@ -1,127 +1,165 @@
-# Tìm hiểu DAG trong KG
+---
+title: "TÌM HIỂU DAG TRONG KNOWLEDGE GRAPH"
+---
 
-19/10/2026
+# 1. DAG là gì, dùng để làm gì
 
-## 1. Tổng quan
+**Định nghĩa.** DAG (Directed Acyclic Graph) là đồ thị có hướng mà không có chu trình: xuất phát từ một đỉnh bất kỳ, cứ đi theo chiều mũi tên thì không bao giờ quay về được đỉnh đó. Khác cây ở chỗ một đỉnh được phép có nhiều cha.
 
-Tài liệu này tóm tắt cách DAG (Directed Acyclic Graph) được dùng trong Knowledge Graph (KG) để biểu diễn và trả lời các truy vấn logic nhiều bước, và chọn một mô hình nhỏ từ công trình lớn để chạy lại.
+**Mấy tính chất mình cần nhớ:**
 
-- **Task được giao:** tìm hiểu DAG trong KG, sau đó code một mô hình nhỏ của DAG; có thể lấy repo có sẵn nhưng phải từ công trình lớn và có dataset rõ ràng.
-- **Hướng chọn:** truy vấn logic trên KG (complex logical query answering), nơi mỗi truy vấn là một DAG tính toán.
-- **Repo gốc:** [snap-stanford/KGReasoning](https://github.com/snap-stanford/KGReasoning), code chính thức của GQE, Query2Box, BetaE.
-- **Dataset:** FB15k-237 (14.505 entity, 474 relation).
-- **Sản phẩm:** tài liệu này và repo [minhquan-maker/dag-in-kg](https://github.com/minhquan-maker/dag-in-kg).
+- *Thứ tự topo.* Đồ thị có hướng là DAG khi và chỉ khi xếp được các đỉnh thành một dãy sao cho mọi cạnh u → v đều có u đứng trước v. Có dãy này thì xử lý đỉnh nào cũng đã có sẵn kết quả của các đỉnh nó phụ thuộc.
+- *Nguồn và đích.* DAG hữu hạn luôn có ít nhất một đỉnh không có cạnh vào (nguồn) và một đỉnh không có cạnh ra (đích).
+- *Thứ tự bộ phận.* "Từ u đi tới được v" là quan hệ bắc cầu và không có hai đỉnh nào đi tới nhau, tức là một thứ tự bộ phận chặt. Từ đây có hai phép hay dùng: **bao đóng bắc cầu** (thêm cạnh u → w nếu có đường u → … → w) và **rút gọn bắc cầu** (bỏ những cạnh suy ra được, chỉ giữ phần khung tối thiểu).
 
-## 2. DAG là gì
+**Thuật toán cơ bản:**
 
-DAG là đồ thị có hướng, không có chu trình: đi theo chiều cạnh thì không bao giờ quay lại đỉnh đã đi qua. Một nhãn đỉnh có thể có nhiều cha, nên DAG tổng quát hóa cây.
+- *Sắp xếp topo (Kahn).* Mỗi bước lấy một đỉnh có bậc vào 0, rồi xóa các cạnh đi ra của nó. Độ phức tạp O(V + E). Nếu còn đỉnh mà không đỉnh nào có bậc vào 0 thì đồ thị có chu trình. Cách khác là DFS, ghi đỉnh lúc duyệt xong rồi đảo ngược dãy.
+- *Quy hoạch động trên DAG.* Duyệt theo thứ tự topo, giá trị mỗi đỉnh tính từ các đỉnh đứng trước. Dùng được cho đường đi dài nhất, đếm số đường đi, lan truyền giá trị từ nguồn tới đích. Bao đóng bắc cầu cũng làm kiểu này: tổ tiên(c) = hợp của {p} ∪ tổ tiên(p) qua mọi cha p của c.
+- *Tổ tiên chung gần nhất (LCA).* Trong cây thì LCA duy nhất, còn trong DAG hai đỉnh có thể có nhiều LCA. Hay dùng để đo hai khái niệm gần nhau cỡ nào trong một phân cấp.
 
-### 2.1 Thuật toán cơ bản trên DAG
+# 2. DAG nằm ở đâu trong KG
 
-Bốn thao tác dưới đây được cài trong `dagkg.py` và chạy trên dữ liệu thật (82.115 đỉnh, 84.427 cạnh).
+Bản thân một KG thường có chu trình (A quen B, B quen A, ...) nên không phải DAG. DAG chỉ hiện ra ở một số phần và một số cách dùng KG. Mình gom được ba chỗ.
 
-| Thao tác | Ý nghĩa | Cách làm |
-| --- | --- | --- |
-| Sắp xếp topo | Thứ tự mà cha luôn đứng trước con; phát hiện chu trình | Kahn: lấy đỉnh bậc vào 0, gỡ cạnh; nếu còn đỉnh thì có chu trình. Độ phức tạp O(V + E) |
-| Bao đóng bắc cầu | Tập mọi tổ tiên của mỗi đỉnh | Quy hoạch động theo thứ tự topo: tổ tiên(c) = hợp của ({p} ∪ tổ tiên(p)) qua mọi cha p |
-| Rút gọn bắc cầu | Giữ cạnh cơ bản, bỏ cạnh suy ra được | Bỏ (c, p) nếu p là tổ tiên của một cha khác của c |
-| Tách train/val/test | Đo khả năng suy ra cạnh bắc cầu chưa thấy | Toàn bộ cạnh cơ bản vào train; trong phần còn lại của bao đóng: 10% test, 5% val |
+## 2.1. Phân cấp khái niệm (is-a)
 
-### 2.2 Ví dụ
+Các khái niệm trong KG xếp theo quan hệ "là một loại của" (is-a; trong RDF/OWL là `subClassOf`). Chó là một loại Thú, Thú là một loại Động vật. Vẽ mũi tên từ con lên cha thì ra DAG:
 
-Trong WordNet, "Động vật ⊃ Thú ⊃ Chó" là một chuỗi. Cạnh Chó → Động vật là cạnh bắc cầu: nó không nằm trong tập cạnh cơ bản nhưng suy ra được từ hai cạnh kề nhau. 2.213 danh từ có hơn một cha, nên dữ liệu này thực sự là DAG chứ không phải cây.
+- Không có chu trình, vì không khái niệm nào là một loại của chính nó.
+- Không phải cây, vì một khái niệm có nhiều cha (Chó vừa là Thú vừa là Vật nuôi).
+- Suy diễn bắc cầu: Chó → Thú → Động vật nên Chó → Động vật. Đi ngược lên theo mũi tên là ra mọi khái niệm rộng hơn.
 
-## 3. DAG trong Knowledge Graph
+Từ đây có bài toán **nhúng phân cấp**: biểu diễn mỗi khái niệm bằng một hình trong không gian sao cho "cha chứa con" đọc ra được từ hình học.
 
-DAG xuất hiện trong KG theo hai vai trò khác nhau; bài này đào sâu vai trò thứ nhất và điểm qua vai trò thứ hai.
+- *Order embedding:* u là con của v khi u ≥ v ở mọi tọa độ. Bắc cầu có sẵn vì ≥ từng tọa độ là bắc cầu.
+- *Box embedding:* mỗi khái niệm là một hộp, hộp Động vật chứa hộp Thú, hộp Thú chứa hộp Chó.
+- *Poincaré embedding:* dùng không gian hyperbolic, càng ra xa tâm càng "rộng" nên xếp được rất nhiều nhánh con. Khái niệm tổng quát nằm gần tâm, khái niệm cụ thể nằm gần biên.
+- *Hyperbolic entailment cones:* mỗi khái niệm có một hình nón, con nằm trong nón của cha.
 
-| | Vai trò | DAG biểu diễn cái gì | Bài toán | Mô hình |
-| --- | --- | --- | --- | --- |
-| A | Phân cấp khái niệm (is-a) | Dữ liệu: đỉnh là khái niệm, cạnh là "là một loại của" | Link prediction trên cạnh bắc cầu | Poincaré, order embedding, box embedding |
-| B | DAG tính toán của truy vấn logic | Truy vấn: đỉnh là tập thực thể, cạnh là phép toán | Complex logical query answering | GQE, Query2Box, BetaE |
+## 2.2. Truy vấn logic nhiều bước
 
-### 3.1 Phân cấp khái niệm (vai trò A)
+Câu hỏi phức tạp trên KG viết được thành công thức logic, và cấu trúc tính toán của công thức đó là một DAG: thực thể đã biết là đỉnh nguồn, đáp án là đỉnh đích, ở giữa là biến trung gian hoặc phép toán logic. Phần 3 và 4 đi sâu vào cái này.
 
-Quan hệ is-a là bắc cầu: Chó là Thú, Thú là Động vật thì Chó là Động vật. Một embedding tốt phải đọc ra được quan hệ này từ hình học, vì thế các mô hình khác nhau chọn hình học khác nhau:
+## 2.3. Kế hoạch suy luận trong KG-RAG
 
-- **Poincaré:** điểm trong quả cầu hyperbolic; khái niệm tổng quát gần gốc, khái niệm cụ thể gần biên.
-- **Order embedding:** "u là con của v" khi u ≥ v ở mọi tọa độ. Bắc cầu có sẵn từ thứ tự từng phần.
-- **Box embedding:** mỗi khái niệm là một hộp; con nằm trong hộp cha. Đúng ví dụ Động vật ⊃ Thú ⊃ Chó.
+KG-RAG hay tách câu hỏi khó thành các câu nhỏ. Ví dụ "Einstein và Marie Curie, ai sinh trước?" tách thành (1) Einstein sinh năm nào, (2) Marie Curie sinh năm nào, (3) so sánh hai năm. Câu (3) phải chờ (1) và (2); (1) với (2) chạy song song được. Các câu nhỏ cùng quan hệ "phải chờ" tạo thành một DAG, hệ thống trả lời theo thứ tự topo.
 
-### 3.2 DAG tính toán của truy vấn logic (vai trò B)
+# 3. Trả lời truy vấn logic phức tạp trên KG
 
-Một truy vấn nhiều bước như "những đạo diễn có phim thuộc thể loại X **và** do diễn viên Y đóng" được viết thành DAG gồm ba phép toán trên tập thực thể:
+## 3.1. Câu hỏi thành công thức
 
-- **Projection (p):** từ tập thực thể, đi theo một quan hệ để ra tập mới.
-- **Intersection (i):** giao của các nhánh; đây là chỗ DAG khác chuỗi, vì một đỉnh nhận nhiều cạnh vào.
-- **Union (u):** hợp của các nhánh.
+Ví dụ: "Những ai đoạt giải Nobel Vật lý và sinh ra ở một thành phố của Đức?"
 
-Các dạng truy vấn chuẩn trên FB15k-237: 1p, 2p, 3p, 2i, 3i (huấn luyện) và thêm ip, pi, 2u, up (chỉ dùng khi đánh giá). Con số trong tên là số bước hoặc số nhánh. Mô hình nhúng truy vấn thành vector (GQE), hộp (Query2Box) hoặc phân phối Beta (BetaE) rồi duyệt DAG từ thực thể neo đến đỉnh đích.
+q = V? . ∃V : thành_phố_của(V, Đức) ∧ sinh_tại(V?, V) ∧ đạt_giải(V?, Nobel Vật lý)
 
-## 4. Các công trình chính
+Đọc là: tìm V? sao cho có một thành phố V của Đức mà V? sinh tại V, và V? đạt giải Nobel Vật lý. V? là đáp án, V là biến trung gian (không cần biết cụ thể là thành phố nào).
 
-Hai nhóm công trình tương ứng hai vai trò ở mục 3. Nhóm B là nền tảng cho truy vấn logic trên KG; nhóm A là nền tảng cho nhúng phân cấp.
+Các phép dùng để dựng truy vấn:
 
-| Nhóm | Công trình | Hội nghị | Ý chính |
+- **Chiếu (projection):** đi theo một quan hệ từ tập thực thể này sang tập khác. Ví dụ từ {Đức} đi theo quan hệ ngược thành_phố_của⁻¹ ra tập các thành phố của Đức.
+- **Giao (∧):** giữ thực thể thỏa mọi nhánh.
+- **Hợp (∨):** thỏa ít nhất một nhánh.
+- **Phủ định (¬):** lấy phần bù.
+
+Truy vấn chỉ dùng ∃, ∧, ∨ gọi là EPFO (existential positive first-order). Thêm ¬ thì rộng hơn.
+
+## 3.2. Từ câu hỏi sang DAG
+
+Mỗi câu hỏi vẽ thành một DAG: điểm xuất phát là các thực thể đã biết (Đức, Giải Nobel Vật lý), mỗi mũi tên là một bước đi theo quan hệ, chỗ hai nhánh gặp nhau là phép giao, điểm cuối V? là đáp án. Trả lời = đi qua DAG theo thứ tự topo, xong bước trước mới tới bước sau. Tên các dạng câu hỏi đọc theo hình dạng DAG: 1p, 2p, 3p là chuỗi 1, 2, 3 phép chiếu; 2i, 3i là giao của 2, 3 nhánh; ip, pi, 2u, up là các dạng ghép (giao rồi chiếu, chiếu rồi giao, hợp của hai nhánh, hợp rồi chiếu).
+
+## 3.3. Vì sao không duyệt đồ thị trực tiếp
+
+- **KG thiếu cạnh.** FB15k-237 hay Wikidata thiếu rất nhiều sự thật đúng. Nếu KG thiếu cạnh "Einstein sinh tại Ulm" thì đi trực tiếp sẽ không bao giờ ra Einstein.
+- **Tập trung gian nổ rất nhanh.** Một nước có hàng nghìn thành phố, mỗi thành phố có rất nhiều người sinh ra, nên câu nhiều bước tốn thời gian.
+
+Cách giải là **nhúng truy vấn (query embedding)**: đưa thực thể và câu hỏi vào cùng một không gian vector. Mỗi phép chiếu, giao, hợp là một phép tính trên vector và được học từ dữ liệu. Đi hết DAG thì có vector của câu hỏi, đáp án là các thực thể gần nó nhất. Vì học quy luật chung của KG nên mô hình đoán được cả cạnh bị thiếu, và mỗi bước chỉ là một phép tính vector nên chi phí không phụ thuộc số thực thể trung gian.
+
+# 4. GQE, Query2Box, BetaE
+
+Cả ba làm cùng một khung: mỗi thực thể và quan hệ có embedding học được; đi theo DAG của câu hỏi, dùng phép chiếu và phép giao để biến embedding thực thể xuất phát thành embedding câu hỏi; tính khoảng cách từ câu hỏi tới mọi thực thể, càng gần càng có khả năng là đáp án. Khác nhau ở **hình dạng của embedding câu hỏi**.
+
+| | GQE | Query2Box | BetaE |
 | --- | --- | --- | --- |
-| B | GQE (Hamilton et al.) | NeurIPS 2018 | Truy vấn là vector; projection và intersection là mạng nơ-ron |
-| B | Query2Box (Ren et al.) | ICLR 2020 | Truy vấn là hộp; giao hộp tự nhiên hơn giao vector |
-| B | BetaE (Ren & Leskovec) | NeurIPS 2020 | Truy vấn là phân phối Beta; hỗ trợ cả phủ định (NOT) |
-| A | Poincaré Embeddings (Nickel & Kiela) | NeurIPS 2017 | Nhúng cây/DAG vào quả cầu hyperbolic |
-| A | Hyperbolic Entailment Cones (Ganea et al.) | ICML 2018 | Nón hyperbolic cho quan hệ thứ tự; giao thức tách dữ liệu dùng trong repo |
-| A | Order Embeddings (Vendrov et al.) | ICLR 2016 | Thứ tự từng phần trong orthant dương |
-| A | Box Lattice Measures (Vilnis et al.) | ACL 2018 | Nhúng KG bằng hộp, "nằm trong" = suy ra |
+| Câu hỏi là | một điểm | một hộp (tâm + offset) | một bộ d phân phối Beta |
+| Chiếu | q + r | dời tâm, nới rộng hộp | MLP ra (α, β) mới |
+| Giao | trung bình có trọng số (attention) | tâm: trung bình có trọng số; kích thước: lấy nhỏ nhất rồi nhân hệ số trong (0, 1) | nhân các đường cong có trọng số |
+| Hợp | không làm trực tiếp | đưa về DNF, lấy khoảng cách nhỏ nhất tới các hộp | DNF hoặc De Morgan |
+| Phủ định | không | không | (α, β) → (1/α, 1/β) |
+| Khoảng cách | γ − ‖e − q‖₁ | dist_out + α·dist_in | KL divergence |
+| Công bố | NeurIPS 2018 | ICLR 2020 | NeurIPS 2020 |
 
-Các con số tham chiếu trên FB15k-237 (MRR trung bình, %), theo README repo của [Trần Bình](https://github.com/btphuong3011/dag-kg-reasoning) trích từ paper: GQE 16,3; Query2Box 20,1; BetaE 20,9. Đây là mức chạy đầy đủ trên GPU; bản CPU thu nhỏ của bạn ấy đạt thấp hơn (GQE 6,6; Query2Box 5,8).
+## 4.1. GQE (Hamilton và cộng sự)
 
-Paper ở nhóm B đã có repo chính thức [snap-stanford/KGReasoning](https://github.com/snap-stanford/KGReasoning). Repo của mình tập trung nhóm A để không trùng việc.
+Truy vấn là một vector. Chiếu là cộng vector quan hệ: Đức = (1, 2), quan hệ = (3, 0) thì sau chiếu được (4, 2). Giao là trung bình có trọng số, trọng số do một mạng attention nhỏ tự học (nhánh đáng tin hơn thì trọng số lớn hơn). Điểm của thực thể e là γ − ‖e − q‖₁, với ‖·‖₁ là khoảng cách L1 (cộng trị tuyệt đối chênh lệch từng tọa độ), γ là hằng số.
 
-## 5. Mô hình và dataset chọn để code nhỏ
+Hạn chế: câu hỏi thường có nhiều đáp án mà một điểm thì khó bao được cả tập; GQE cũng không làm trực tiếp được phép hợp.
 
-Repo [minhquan-maker/dag-in-kg](https://github.com/minhquan-maker/dag-in-kg) nhúng DAG is-a của WordNet danh từ bằng ba mô hình (Poincaré, order, box) và so với một baseline không học. Dataset và giao thức tách lấy từ công trình lớn (Nickel & Kiela 2017; Ganea et al. 2018) nên so sánh được với paper.
+## 4.2. Query2Box (Ren, Hu & Leskovec)
 
-**Vì sao chọn hướng này:** dataset rõ ràng, chạy được trên CPU, và DAG hiện ra trực tiếp trong dữ liệu. Dùng đúng ví dụ Thú ⊃ Chó của phần lý thuyết.
+Truy vấn là một hộp trong không gian d chiều, gồm tâm và offset (nửa độ dài cạnh, không âm). Ví dụ tâm (4, 2), offset (1; 0,5) là hộp có x từ 3 đến 5 và y từ 1,5 đến 2,5. Thực thể nằm trong hộp là đáp án, hợp với trường hợp đáp án là cả một tập.
 
-### 5.1 Dataset: WordNet 3.0 danh từ
+- Chiếu: dời tâm theo vector quan hệ và nới hộp ra, vì đi qua một quan hệ thì số đáp án thường tăng.
+- Giao: hộp mới luôn nhỏ hơn mọi hộp ban đầu, giống giao tập hợp.
+- Khoảng cách: dist_out + α·dist_in. Phần nằm ngoài hộp phạt nặng, bên trong phạt nhẹ (α = 0,02 trong cấu hình gốc).
+- Hợp: hợp của các hộp không còn là hộp, nên viết lại câu hỏi để "hoặc" nằm ở bước cuối (dạng chuẩn tắc tuyển, DNF). Ví dụ "(A hoặc B) rồi đi theo r" thành "(A đi theo r) hoặc (B đi theo r)"; mỗi vế là một hộp, thực thể chỉ cần gần một trong các hộp.
 
-Code tự dựng lại từ file `data.noun` gốc (`tools/build_wordnet_dag.py`) và khớp paper ở những con số paper công bố.
+## 4.3. BetaE (Ren & Leskovec)
 
-| Chỉ số | Repo này | Paper |
+Phân phối Beta là một đường cong trên [0, 1] có hình dạng do hai số α, β quyết định: Beta(2, 5) lệch trái, Beta(5, 2) lệch phải, Beta(1, 1) phẳng. Mỗi thực thể và mỗi câu hỏi là d đường cong như vậy, mỗi chiều một đường.
+
+- Giao: nhân các đường cong với trọng số, chỉ giữ vùng mà mọi nhánh đều cao. Kết quả vẫn là Beta, với α, β là tổng có trọng số của α, β ban đầu.
+- Phủ định: (α, β) → (1/α, 1/β) biến vùng mật độ cao thành thấp và ngược lại; áp dụng hai lần thì về như cũ. Đây là lý do BetaE là mô hình duy nhất trong ba cái làm được câu hỏi có phủ định.
+- Hợp: DNF hoặc De Morgan, A ∨ B = ¬(¬A ∧ ¬B).
+- Đường cong càng trải rộng thì câu hỏi càng nhiều đáp án, nên BetaE ước lượng được câu hỏi rộng hay hẹp.
+
+## 4.4. Huấn luyện và đánh giá
+
+- **Huấn luyện:** lấy truy vấn q, một đáp án đúng v và k thực thể ngẫu nhiên không phải đáp án v′₁…v′ₖ (mẫu âm). Hàm mất mát L = −log σ(γ − d(v, q)) − (1/k)·Σᵢ log σ(d(v′ᵢ, q) − γ), d là khoảng cách, σ là sigmoid. Vế đầu nhỏ khi đáp án đúng gần câu hỏi, vế sau nhỏ khi đáp án sai xa. Tức là kéo đáp án đúng lại gần, đẩy đáp án sai ra xa.
+- **Easy và hard answers:** đồ thị chia train ⊂ valid ⊂ test. Với truy vấn test, đáp án tìm được bằng cách duyệt đồ thị valid là "easy"; đáp án chỉ xuất hiện khi thêm cạnh test là "hard", tức mô hình phải tự suy ra cạnh thiếu. Chỉ hard answers được tính điểm, easy bị loại khỏi bảng xếp hạng (filtered setting).
+- **Độ đo:** với mỗi hard answer lấy thứ hạng của nó trong danh sách mọi thực thể. MRR là trung bình 1/thứ hạng, Hits@k là tỉ lệ đáp án nằm trong top-k. Báo cáo riêng từng dạng truy vấn.
+
+Phần chạy thực nghiệm GQE / Query2Box trên FB15k-237 là repo của Trần Bình (fork từ snap-stanford/KGReasoning, chạy bản nhỏ trên CPU), nên mình không làm lại. Ở phần dưới mình chạy hướng còn lại, là phân cấp is-a ở mục 2.1.
+
+# 5. Tự chạy: nhúng DAG is-a của WordNet
+
+Repo: github.com/minhquan-maker/dag-in-kg. Mục tiêu: kiểm tra xem mấy cách nhúng ở 2.1 có thật sự đọc ra được "u là một loại của v" từ hình học hay không, trên một DAG thật chứ không phải ví dụ đồ chơi.
+
+## 5.1. Dữ liệu
+
+WordNet 3.0 danh từ, dùng đúng bộ của Poincaré Embeddings (Nickel & Kiela, NeurIPS 2017) và Hyperbolic Entailment Cones (Ganea và cộng sự, ICML 2018). Mình tự dựng lại từ file `data.noun` gốc rồi so với số trong paper:
+
+| | Repo này | Paper |
 | --- | --- | --- |
 | Synset danh từ | 82.115 | 82.115 |
 | Cạnh is-a (hypernym + instance hypernym) | 84.427 | |
-| Nút có hơn 1 cha (không phải cây) | 2.213 | |
+| Nút có hơn 1 cha | 2.213 | |
 | Cạnh bao đóng bắc cầu | 743.241 | 743.241 |
 
-Sau khi tách: ở mức train thêm 50% cạnh bắc cầu: train 364.388, val 32.943, test 65.887 cạnh.
+Hai số khớp paper thì yên tâm là dựng đúng. 2.213 nút có nhiều cha, nghĩa là dữ liệu này đúng là DAG chứ không phải cây.
 
-### 5.2 Bốn mô hình (dim = 10)
+## 5.2. Cách làm
 
-| Mô hình | Đọc quan hệ "u là con của v" từ | Huấn luyện |
+Các thuật toán ở mục 1 được cài trong `dagkg.py` và chạy trên dữ liệu thật: Kahn có kiểm tra chu trình, bao đóng bằng quy hoạch động theo thứ tự topo, rút gọn bắc cầu.
+
+Cách chia dữ liệu theo Ganea: toàn bộ cạnh cơ bản (sau rút gọn bắc cầu) luôn nằm trong train. Trong các cạnh bao đóng còn lại, 10% làm test, 5% làm val, và phần train lấy thêm 0% hoặc 50% số còn lại. Nhờ vậy tập test đo đúng khả năng **suy ra cạnh bắc cầu chưa thấy**.
+
+Bốn mô hình, đều dim = 10:
+
+| Mô hình | Đọc "u là con của v" từ | Huấn luyện |
 | --- | --- | --- |
-| popularity | Số lần v làm cha trong train (baseline) | Không |
-| poincare | Khoảng cách hyperbolic, v gần gốc hơn u | Riemannian SGD |
-| order | u ≥ v ở mọi tọa độ; điểm phạt = mức vi phạm | Margin loss |
-| box | Hộp u nằm trong hộp v; điểm phạt = phần hộp tràn ra ngoài | Margin loss |
+| popularity | số lần v làm cha trong train (baseline, không học) | không |
+| poincare | khoảng cách hyperbolic, v gần gốc hơn u | Riemannian SGD |
+| order | u ≥ v từng tọa độ, điểm phạt là mức vi phạm | margin loss |
+| box | hộp u nằm trong hộp v, điểm phạt là phần hộp tràn ra ngoài | margin loss |
 
-## 6. Cách chạy và kết quả
+Đánh giá có hai kiểu negative. *Easy*: nút thay thế chọn ngẫu nhiên đều. *Hard*: chọn theo phân phối các nút từng làm cha trong train, để "nút này hay làm cha" không còn là manh mối. Lý do có kiểu hard: lúc đầu mình thấy negative ngẫu nhiên quá dễ, baseline popularity không học gì mà vẫn được F1 khoảng 0,80. Hai độ đo: F1 phân loại cạnh thật với cạnh giả (50/50, ngưỡng chọn trên val) và MRR của cha thật so với 100 ứng viên.
 
-Box cho kết quả tốt nhất ở cả hai mức dữ liệu (hard F1 0,81 khi train chỉ có cạnh cơ bản, 0,95 khi thêm 50% cạnh bắc cầu). Kết quả dùng 1 seed, 30 epoch.
+Chạy: `bash run_all.sh`, khoảng 15 phút trên CPU 4 nhân, không cần GPU.
 
-### 6.1 Cách chạy
+## 5.3. Kết quả
 
-```bash
-pip install -r requirements.txt
-bash run_all.sh      # khoảng 15 phút trên CPU 4 nhân, không cần GPU
-python3 train_eval.py --model box --hard_neg --frac 0.5   # chạy lẻ một mô hình
-```
-
-### 6.2 Đánh giá
-
-- **Hai chế độ negative:** *easy* chọn nút thay thế ngẫu nhiên đều; *hard* chọn theo phân phối các nút từng làm cha trong train, nên "nút này hay làm cha" không còn là manh mối.
-- **Hai độ đo:** F1 phân loại cạnh thật với cạnh giả (50/50, ngưỡng chọn trên val); MRR của cha thật so với 100 ứng viên.
-
-### 6.3 Kết quả trên tập test
+Tập test, 1 seed, 30 epoch, dim 10.
 
 | % cạnh bắc cầu có trong train | Mô hình | easy F1 | easy MRR | hard F1 | hard MRR |
 | --- | --- | --- | --- | --- | --- |
@@ -134,29 +172,16 @@ python3 train_eval.py --model box --hard_neg --frac 0.5   # chạy lẻ một m�
 | 50% | order | 0,887 | 0,993 | 0,819 | 0,852 |
 | 50% | box | 0,948 | 0,999 | 0,953 | 0,944 |
 
-### 6.4 Nhận xét
+Mấy điều rút ra:
 
-- **Đọc cột hard.** Ở easy, baseline popularity đã đạt F1 ≈ 0,80 và MRR 0,93 (50%), nhưng ở hard chỉ còn F1 ≈ 0,68 và MRR 0,16.
-- **Poincaré cần thấy cạnh bắc cầu.** Khi train chỉ có cạnh cơ bản, Poincaré chưa hơn baseline (hard F1 0,693 so với 0,680).
-- **Poincaré thấp hơn số trong paper** và thấp hơn Box ở đây. Mình chỉ train 30 epoch, dim 10, 1 seed, chọn lr = 30 bằng thử trên val và dùng negative trộn "hard" cho cả 3 mô hình; paper train hàng trăm epoch với setup khác. Bảng này **không** dùng để kết luận hyperbolic kém hơn box; nó chỉ kiểm tra pipeline chạy đúng và mô hình học được cấu trúc DAG thật.
-- **Chênh lệch vài điểm %** với 1 seed chưa đủ để kết luận.
+- Phải đọc cột hard. Ở easy, popularity đã được F1 khoảng 0,80 và MRR 0,93 (mức 50%), sang hard còn F1 khoảng 0,68 và MRR 0,16.
+- Box tốt nhất ở cả hai mức dữ liệu (hard F1 0,81 và 0,95). Hộp nằm trong hộp khớp đúng ví dụ Động vật ⊃ Thú ⊃ Chó.
+- Khi train chỉ có cạnh cơ bản (0%), Poincaré chưa hơn baseline (hard F1 0,693 so với 0,680). Mô hình cần thấy cạnh bắc cầu thì hình học mới có tác dụng.
+- Poincaré **thấp hơn** số trong paper và thấp hơn Box ở đây. Mình chỉ train 30 epoch, dim 10, 1 seed, chọn lr = 30 bằng cách thử trên val và dùng negative trộn kiểu hard cho cả ba mô hình; paper train hàng trăm epoch với setup khác. Nên bảng này **không** dùng để kết luận hyperbolic kém hơn box, nó chỉ cho thấy pipeline chạy đúng và mô hình học được cấu trúc DAG thật.
+- Chỉ một seed nên chênh vài điểm % chưa đủ để kết luận.
 
-## 7. Kết luận và hướng tiếp theo
+# 6. Rút ra
 
-DAG trong KG vừa là cấu trúc dữ liệu (phân cấp is-a) vừa là cấu trúc tính toán (truy vấn logic); repo này chứng minh vai trò thứ nhất trên dữ liệu thật, với box embedding phù hợp nhất trong các mô hình đã thử.
+DAG xuất hiện trong KG ở hai chỗ chính: phân cấp khái niệm (is-a) và sơ đồ tính toán của câu hỏi nhiều bước (kèm kế hoạch suy luận trong KG-RAG). Với truy vấn logic, GQE, Query2Box, BetaE biến từng phép trên DAG thành phép tính học được nên trả lời được cả những câu cần cạnh bị thiếu; cách biểu diễn câu hỏi đi từ điểm, sang hộp, sang phân phối Beta, và mỗi bước làm được thêm một thứ (đáp án là cả tập, rồi phủ định, rồi độ rộng hẹp của câu hỏi). Với phân cấp, thử trên WordNet thì hộp là cách nhúng ăn nhất trong ba cách đã chạy.
 
-**Hướng tiếp theo**
-
-- [ ] Chạy nhiều seed và nhiều epoch hơn để kết luận được Poincaré so với Box.
-- [ ] Thử dim lớn hơn 10 và xem kết quả thay đổi thế nào.
-- [ ] Nối hai nhóm: dùng embedding phân cấp làm nguồn thông tin cho truy vấn logic trên KG.
-- [ ] Đối chiếu với kết quả GQE / Query2Box trên FB15k-237 của Trần Bình.
-
-**Lưu ý về nguồn:** không truy cập được Google Doc mẫu từ môi trường chạy, nên bố cục doc này dựa trên cấu trúc báo cáo của repo mẫu; có thể cần chỉnh lại cho giống hoàn toàn.
-
-### Nguồn
-
-- [dag-kg-reasoning (Trần Bình)](https://github.com/btphuong3011/dag-kg-reasoning), đã mở ngày 2026-10-19: số liệu GQE / Query2Box / BetaE trên FB15k-237.
-- [snap-stanford/KGReasoning](https://github.com/snap-stanford/KGReasoning): repo chính thức của nhóm B (chưa mở được từ môi trường này).
-- [minhquan-maker/dag-in-kg](https://github.com/minhquan-maker/dag-in-kg): code và kết quả ở mục 5 và 6.
-- Nickel & Kiela, Poincaré Embeddings, NeurIPS 2017; Ganea et al., Hyperbolic Entailment Cones, ICML 2018; Vendrov et al., Order-Embeddings, ICLR 2016; Vilnis et al., Box Lattice Measures, ACL 2018.
+Còn muốn làm tiếp: chạy nhiều seed và nhiều epoch để biết chắc Poincaré với Box ai hơn; thử dim lớn hơn 10; thử dùng embedding phân cấp làm thông tin thêm cho truy vấn logic.
