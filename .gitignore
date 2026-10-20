@@ -1,2 +1,6 @@
 __pycache__/
 data/raw/
+kgqa/data/
+kgqa/gen.log
+kgqa/run_all.log
+kgqa/results/*.log

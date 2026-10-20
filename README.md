@@ -1,6 +1,6 @@
 # dag-in-kg: DAG như phân cấp khái niệm (is-a) trong Knowledge Graph
 
-Bài tìm hiểu DAG trong KG, phần **§2.1 – phân cấp khái niệm**: embedding một DAG is-a sao cho "u là một loại của v" được đọc ra từ hình học. Phần §2.2 (DAG tính toán của truy vấn logic: GQE/Query2Box/BetaE) đã có repo khác, nên repo này làm hướng còn lại.
+Bài tìm hiểu DAG trong KG, phần **§2.1 – phân cấp khái niệm**: embedding một DAG is-a sao cho "u là một loại của v" được đọc ra từ hình học. Phần §2.2 (DAG tính toán của truy vấn logic: GQE/Query2Box/BetaE) nằm trong thư mục [`kgqa/`](kgqa/README.md), chạy trên FB15k-237; thư mục gốc làm hướng còn lại.
 
 **Dữ liệu**: WordNet 3.0 danh từ, dữ liệu chuẩn của Poincaré Embeddings (Nickel & Kiela, NeurIPS 2017) và Hyperbolic Entailment Cones (Ganea et al., ICML 2018). Code tự dựng lại từ file `data.noun` gốc và kiểm tra khớp paper:
 
